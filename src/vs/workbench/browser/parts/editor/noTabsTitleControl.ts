@@ -11,6 +11,7 @@ import { IEditorGroup, toResource } from 'vs/workbench/common/editor';
 import DOM = require('vs/base/browser/dom');
 import { TitleControl } from 'vs/workbench/browser/parts/editor/titleControl';
 import { EditorLabel } from 'vs/workbench/browser/labels';
+import { Verbosity } from 'vs/platform/editor/common/editor';
 
 export class NoTabsTitleControl extends TitleControl {
 	private titleContainer: HTMLElement;
@@ -75,11 +76,10 @@ export class NoTabsTitleControl extends TitleControl {
 		}
 
 		const group = this.context;
-		const position = this.stacks.positionOfGroup(group);
 
 		// Close editor on middle mouse click
 		if (e.button === 1 /* Middle Button */) {
-			this.editorService.closeEditor(position, group.activeEditor).done(null, errors.onUnexpectedError);
+			this.closeEditorAction.run({ group, editor: group.activeEditor }).done(null, errors.onUnexpectedError);
 		}
 
 		// Focus editor group unless click on toolbar
@@ -119,12 +119,12 @@ export class NoTabsTitleControl extends TitleControl {
 		const resource = toResource(editor, { supportSideBySide: true });
 		const name = editor.getName() || '';
 		const description = isActive ? (editor.getDescription() || '') : '';
-		let verboseDescription = editor.getDescription(true) || '';
-		if (description === verboseDescription) {
-			verboseDescription = ''; // dont repeat what is already shown
+		let title = editor.getTitle(Verbosity.LONG);
+		if (description === title) {
+			title = ''; // dont repeat what is already shown
 		}
 
-		this.editorLabel.setLabel({ name, description, resource }, { title: verboseDescription, italic: !isPinned, extraClasses: ['title-label'] });
+		this.editorLabel.setLabel({ name, description, resource }, { title, italic: !isPinned, extraClasses: ['title-label'] });
 
 		// Update Editor Actions Toolbar
 		this.updateEditorActionsToolbar();

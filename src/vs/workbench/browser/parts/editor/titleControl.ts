@@ -23,14 +23,14 @@ import { IActionItem, ActionsOrientation, Separator } from 'vs/base/browser/ui/a
 import { ToolBar } from 'vs/base/browser/ui/toolbar/toolbar';
 import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IContextMenuService } from 'vs/platform/contextview/browser/contextView';
-import { IEditorGroupService, ITabOptions } from 'vs/workbench/services/group/common/groupService';
+import { IEditorGroupService } from 'vs/workbench/services/group/common/groupService';
 import { IMessageService, Severity } from 'vs/platform/message/common/message';
 import { StandardMouseEvent } from 'vs/base/browser/mouseEvent';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IQuickOpenService } from 'vs/platform/quickOpen/common/quickOpen';
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
-import { Keybinding } from 'vs/base/common/keyCodes';
+import { ResolvedKeybinding } from 'vs/base/common/keyCodes';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { CloseEditorsInGroupAction, SplitEditorAction, CloseEditorAction, KeepEditorAction, CloseOtherEditorsInGroupAction, CloseRightEditorsInGroupAction, ShowEditorsInGroupAction } from 'vs/workbench/browser/parts/editor/editorActions';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
@@ -76,7 +76,6 @@ export abstract class TitleControl implements ITitleAreaControl {
 
 	private parent: HTMLElement;
 
-	protected tabOptions: ITabOptions;
 	private currentPrimaryEditorActionIds: string[] = [];
 	private currentSecondaryEditorActionIds: string[] = [];
 	protected editorActionsToolbar: ToolBar;
@@ -106,8 +105,6 @@ export abstract class TitleControl implements ITitleAreaControl {
 		this.stacks = editorGroupService.getStacksModel();
 		this.mapActionsToEditors = Object.create(null);
 
-		this.tabOptions = this.editorGroupService.getTabOptions();
-
 		this.scheduler = new RunOnceScheduler(() => this.onSchedule(), 0);
 		this.toDispose.push(this.scheduler);
 
@@ -116,7 +113,7 @@ export abstract class TitleControl implements ITitleAreaControl {
 		this.contextMenu = this.menuService.createMenu(MenuId.EditorTitleContext, this.contextKeyService);
 		this.toDispose.push(this.contextMenu);
 
-		this.initActions();
+		this.initActions(this.instantiationService);
 		this.registerListeners();
 	}
 
@@ -137,7 +134,6 @@ export abstract class TitleControl implements ITitleAreaControl {
 	}
 
 	private registerListeners(): void {
-		this.toDispose.push(this.editorGroupService.onTabOptionsChanged(options => this.tabOptions = options));
 		this.toDispose.push(this.stacks.onModelChanged(e => this.onStacksChanged(e)));
 	}
 
@@ -218,14 +214,14 @@ export abstract class TitleControl implements ITitleAreaControl {
 		return !DOM.findParentWithClass(element, 'monaco-action-bar', 'one-editor-silo');
 	}
 
-	private initActions(): void {
-		this.closeEditorAction = this.instantiationService.createInstance(CloseEditorAction, CloseEditorAction.ID, nls.localize('close', "Close"));
-		this.closeOtherEditorsAction = this.instantiationService.createInstance(CloseOtherEditorsInGroupAction, CloseOtherEditorsInGroupAction.ID, nls.localize('closeOthers', "Close Others"));
-		this.closeRightEditorsAction = this.instantiationService.createInstance(CloseRightEditorsInGroupAction, CloseRightEditorsInGroupAction.ID, nls.localize('closeRight', "Close to the Right"));
-		this.closeEditorsInGroupAction = this.instantiationService.createInstance(CloseEditorsInGroupAction, CloseEditorsInGroupAction.ID, nls.localize('closeAll', "Close All"));
-		this.pinEditorAction = this.instantiationService.createInstance(KeepEditorAction, KeepEditorAction.ID, nls.localize('keepOpen', "Keep Open"));
-		this.showEditorsInGroupAction = this.instantiationService.createInstance(ShowEditorsInGroupAction, ShowEditorsInGroupAction.ID, nls.localize('showOpenedEditors', "Show Opened Editors"));
-		this.splitEditorAction = this.instantiationService.createInstance(SplitEditorAction, SplitEditorAction.ID, SplitEditorAction.LABEL);
+	protected initActions(services: IInstantiationService): void {
+		this.closeEditorAction = services.createInstance(CloseEditorAction, CloseEditorAction.ID, nls.localize('close', "Close"));
+		this.closeOtherEditorsAction = services.createInstance(CloseOtherEditorsInGroupAction, CloseOtherEditorsInGroupAction.ID, nls.localize('closeOthers', "Close Others"));
+		this.closeRightEditorsAction = services.createInstance(CloseRightEditorsInGroupAction, CloseRightEditorsInGroupAction.ID, nls.localize('closeRight', "Close to the Right"));
+		this.closeEditorsInGroupAction = services.createInstance(CloseEditorsInGroupAction, CloseEditorsInGroupAction.ID, nls.localize('closeAll', "Close All"));
+		this.pinEditorAction = services.createInstance(KeepEditorAction, KeepEditorAction.ID, nls.localize('keepOpen', "Keep Open"));
+		this.showEditorsInGroupAction = services.createInstance(ShowEditorsInGroupAction, ShowEditorsInGroupAction.ID, nls.localize('showOpenedEditors', "Show Opened Editors"));
+		this.splitEditorAction = services.createInstance(SplitEditorAction, SplitEditorAction.ID, SplitEditorAction.LABEL);
 	}
 
 	protected createEditorActionsToolBar(container: HTMLElement): void {
@@ -233,8 +229,7 @@ export abstract class TitleControl implements ITitleAreaControl {
 			actionItemProvider: (action: Action) => this.actionItemProvider(action),
 			orientation: ActionsOrientation.HORIZONTAL,
 			ariaLabel: nls.localize('araLabelEditorActions', "Editor actions"),
-			getKeyBinding: (action) => this.getKeybinding(action),
-			getKeyBindingLabel: (key) => this.keybindingService.getLabelFor(key)
+			getKeyBinding: (action) => this.getKeybinding(action)
 		});
 
 		// Action Run Handling
@@ -286,7 +281,7 @@ export abstract class TitleControl implements ITitleAreaControl {
 		const primary: IAction[] = [];
 		const secondary: IAction[] = [];
 
-		const {group} = identifier;
+		const { group } = identifier;
 		const position = this.stacks.positionOfGroup(group);
 
 		// Update the resource context
@@ -372,7 +367,8 @@ export abstract class TitleControl implements ITitleAreaControl {
 			secondaryEditorActions = prepareActions(editorActions.secondary);
 		}
 
-		if (this.tabOptions.showTabs) {
+		const tabOptions = this.editorGroupService.getTabOptions();
+		if (tabOptions.showTabs) {
 			if (secondaryEditorActions.length > 0) {
 				secondaryEditorActions.push(new Separator());
 			}
@@ -382,7 +378,7 @@ export abstract class TitleControl implements ITitleAreaControl {
 		}
 
 		const primaryEditorActionIds = primaryEditorActions.map(a => a.id);
-		if (!this.tabOptions.showTabs) {
+		if (!tabOptions.showTabs) {
 			primaryEditorActionIds.push(this.closeEditorAction.id); // always show "Close" when tabs are disabled
 		}
 
@@ -396,7 +392,7 @@ export abstract class TitleControl implements ITitleAreaControl {
 		) {
 			this.editorActionsToolbar.setActions(primaryEditorActions, secondaryEditorActions)();
 
-			if (!this.tabOptions.showTabs) {
+			if (!tabOptions.showTabs) {
 				this.editorActionsToolbar.addPrimaryAction(this.closeEditorAction)();
 			}
 
@@ -434,20 +430,18 @@ export abstract class TitleControl implements ITitleAreaControl {
 		});
 	}
 
-	protected getKeybinding(action: IAction): Keybinding {
-		const [kb] = this.keybindingService.lookupKeybindings(action.id);
-
-		return kb;
+	protected getKeybinding(action: IAction): ResolvedKeybinding {
+		return this.keybindingService.lookupKeybinding(action.id);
 	}
 
 	protected getKeybindingLabel(action: IAction): string {
 		const keybinding = this.getKeybinding(action);
 
-		return keybinding ? this.keybindingService.getLabelFor(keybinding) : void 0;
+		return keybinding ? keybinding.getLabel() : void 0;
 	}
 
 	protected getContextMenuActions(identifier: IEditorIdentifier): IAction[] {
-		const {editor, group} = identifier;
+		const { editor, group } = identifier;
 
 		// Enablement
 		this.closeOtherEditorsAction.enabled = group.count > 1;
@@ -459,14 +453,15 @@ export abstract class TitleControl implements ITitleAreaControl {
 			this.closeEditorAction,
 			this.closeOtherEditorsAction
 		];
+		const tabOptions = this.editorGroupService.getTabOptions();
 
-		if (this.tabOptions.showTabs) {
+		if (tabOptions.showTabs) {
 			actions.push(this.closeRightEditorsAction);
 		}
 
 		actions.push(this.closeEditorsInGroupAction);
 
-		if (this.tabOptions.previewEditors) {
+		if (tabOptions.previewEditors) {
 			actions.push(new Separator(), this.pinEditorAction);
 		}
 

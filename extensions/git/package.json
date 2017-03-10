@@ -212,14 +212,6 @@
         "category": "Git"
       }
     ],
-    "keybindings": [
-      {
-        "command": "git.commitWithInput",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "inSCMInput"
-      }
-    ],
     "menus": {
       "commandPalette": [
         {
@@ -518,12 +510,12 @@
         {
           "command": "git.openFile",
           "group": "navigation",
-          "when": "isInDiffEditor"
+          "when": "isInDiffEditor && resourceScheme != extension"
         },
         {
           "command": "git.openChange",
           "group": "navigation",
-          "when": "!isInDiffEditor"
+          "when": "!isInDiffEditor && resourceScheme != extension"
         }
       ]
     },
@@ -552,11 +544,6 @@
         "git.autofetch": {
           "type": "boolean",
           "description": "%config.autofetch%",
-          "default": true
-        },
-        "git.enableLongCommitWarning": {
-          "type": "boolean",
-          "description": "%config.enableLongCommitWarning%",
           "default": true
         },
         "git.confirmSync": {

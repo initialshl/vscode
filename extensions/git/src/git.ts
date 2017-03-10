@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as cp from 'child_process';
-import { assign, uniqBy, groupBy, denodeify, IDisposable, toDisposable, dispose } from './util';
+import { assign, uniqBy, groupBy, denodeify, IDisposable, toDisposable, dispose, mkdirp } from './util';
 import { EventEmitter, Event } from 'vscode';
 import * as nls from 'vscode-nls';
 
@@ -289,10 +289,16 @@ export class Git {
 		return new Repository(this, repository, env);
 	}
 
+	async init(repository: string): Promise<void> {
+		await this.exec(repository, ['init']);
+		return;
+	}
+
 	async clone(url: string, parentPath: string): Promise<string> {
 		const folderName = url.replace(/^.*\//, '').replace(/\.git$/, '') || 'repository';
 		const folderPath = path.join(parentPath, folderName);
 
+		await mkdirp(parentPath);
 		await this.exec(parentPath, ['clone', url, folderPath]);
 		return folderPath;
 	}
@@ -426,10 +432,6 @@ export class Repository {
 		options.env = assign(options.env, this.env);
 
 		return this.git.spawn(args, options);
-	}
-
-	init(): Promise<any> {
-		return this.run(['init']);
 	}
 
 	async config(scope: string, key: string, value: any, options: any): Promise<string> {

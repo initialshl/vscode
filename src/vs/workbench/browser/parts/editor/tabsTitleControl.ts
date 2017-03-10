@@ -14,7 +14,7 @@ import { isMacintosh } from 'vs/base/common/platform';
 import { MIME_BINARY } from 'vs/base/common/mime';
 import { shorten } from 'vs/base/common/labels';
 import { ActionRunner, IAction } from 'vs/base/common/actions';
-import { Position, IEditorInput } from 'vs/platform/editor/common/editor';
+import { Position, IEditorInput, Verbosity } from 'vs/platform/editor/common/editor';
 import { IEditorGroup, toResource } from 'vs/workbench/common/editor';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { KeyCode } from 'vs/base/common/keyCodes';
@@ -38,13 +38,15 @@ import { ScrollableElement } from 'vs/base/browser/ui/scrollbar/scrollableElemen
 import { ScrollbarVisibility } from 'vs/base/common/scrollable';
 import { extractResources } from 'vs/base/browser/dnd';
 import { LinkedMap } from 'vs/base/common/map';
+import { DelegatingWorkbenchEditorService } from 'vs/workbench/services/editor/browser/editorService';
+import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
 
 interface IEditorInputLabel {
 	editor: IEditorInput;
 	name: string;
 	hasAmbiguousName?: boolean;
 	description?: string;
-	verboseDescription?: string;
+	title?: string;
 }
 
 export class TabsTitleControl extends TitleControl {
@@ -54,6 +56,7 @@ export class TabsTitleControl extends TitleControl {
 	private editorLabels: EditorLabel[];
 	private scrollbar: ScrollableElement;
 	private tabDisposeables: IDisposable[];
+	private blockRevealActiveTab: boolean;
 
 	constructor(
 		@IContextMenuService contextMenuService: IContextMenuService,
@@ -73,6 +76,34 @@ export class TabsTitleControl extends TitleControl {
 
 		this.tabDisposeables = [];
 		this.editorLabels = [];
+	}
+
+	protected initActions(services: IInstantiationService): void {
+		super.initActions(this.createScopedInstantiationService());
+	}
+
+	private createScopedInstantiationService(): IInstantiationService {
+		const stacks = this.editorGroupService.getStacksModel();
+		const delegatingEditorService = this.instantiationService.createInstance(DelegatingWorkbenchEditorService);
+
+		// We create a scoped instantiation service to override the behaviour when closing an inactive editor
+		// Specifically we want to move focus back to the editor when an inactive editor is closed from anywhere
+		// in the tabs title control (e.g. mouse middle click, context menu on tab). This is only needed for
+		// the inactive editors because closing the active one will always cause a tab switch that sets focus.
+		// We also want to block the tabs container to reveal the currently active tab because that makes it very
+		// hard to close multiple inactive tabs next to each other.
+		delegatingEditorService.setEditorCloseHandler((position, editor) => {
+			const group = stacks.groupAt(position);
+			if (group && stacks.isActive(group) && !group.isActive(editor)) {
+				this.editorGroupService.focusGroup(group);
+			}
+
+			this.blockRevealActiveTab = true;
+
+			return TPromise.as(void 0);
+		});
+
+		return this.instantiationService.createChild(new ServiceCollection([IWorkbenchEditorService, delegatingEditorService]));
 	}
 
 	public setContext(group: IEditorGroup): void {
@@ -211,13 +242,14 @@ export class TabsTitleControl extends TitleControl {
 				const label = labels[index];
 				const name = label.name;
 				const description = label.hasAmbiguousName && label.description ? label.description : '';
-				const verboseDescription = label.verboseDescription || '';
+				const title = label.title || '';
 
 				// Container
 				tabContainer.setAttribute('aria-label', `${name}, tab`);
-				tabContainer.title = verboseDescription;
+				tabContainer.title = title;
+				const tabOptions = this.editorGroupService.getTabOptions();
 				['off', 'left'].forEach(option => {
-					const domAction = this.tabOptions.tabCloseButton === option ? DOM.addClass : DOM.removeClass;
+					const domAction = tabOptions.tabCloseButton === option ? DOM.addClass : DOM.removeClass;
 					domAction(tabContainer, `close-button-${option}`);
 				});
 
@@ -264,7 +296,7 @@ export class TabsTitleControl extends TitleControl {
 				editor,
 				name: editor.getName(),
 				description,
-				verboseDescription: editor.getDescription(true)
+				title: editor.getTitle(Verbosity.LONG)
 			};
 			labels.push(item);
 
@@ -395,7 +427,13 @@ export class TabsTitleControl extends TitleControl {
 			scrollWidth: totalContainerWidth
 		});
 
-		// Always reveal the active one
+		// Return now if we are blocked to reveal the active tab and clear flag
+		if (this.blockRevealActiveTab) {
+			this.blockRevealActiveTab = false;
+			return;
+		}
+
+		// Reveal the active one
 		const containerScrollPosX = this.tabsContainer.scrollLeft;
 		const activeTabPosX = this.activeTab.offsetLeft;
 		const activeTabWidth = this.activeTab.offsetWidth;
@@ -436,9 +474,7 @@ export class TabsTitleControl extends TitleControl {
 			tab.blur();
 
 			if (e.button === 1 /* Middle Button */) {
-				const { editor, position } = this.toTabContext(index);
-
-				this.editorService.closeEditor(position, editor).done(null, errors.onUnexpectedError);
+				this.closeEditorAction.run(this.toTabContext(index)).done(null, errors.onUnexpectedError);
 			}
 		}));
 

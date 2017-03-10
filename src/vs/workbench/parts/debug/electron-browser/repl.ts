@@ -37,7 +37,7 @@ import * as debug from 'vs/workbench/parts/debug/common/debug';
 import { ClearReplAction } from 'vs/workbench/parts/debug/browser/debugActions';
 import { ReplHistory } from 'vs/workbench/parts/debug/common/replHistory';
 import { Panel } from 'vs/workbench/browser/panel';
-import { IThemeService } from 'vs/workbench/services/themes/common/themeService';
+import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/themeService';
 import { IPanelService } from 'vs/workbench/services/panel/common/panelService';
 import { IListService } from 'vs/platform/list/browser/listService';
 
@@ -86,7 +86,7 @@ export class Repl extends Panel implements IPrivateReplService {
 		@IInstantiationService private instantiationService: IInstantiationService,
 		@IStorageService private storageService: IStorageService,
 		@IPanelService private panelService: IPanelService,
-		@IThemeService private themeService: IThemeService,
+		@IWorkbenchThemeService private themeService: IWorkbenchThemeService,
 		@IModelService private modelService: IModelService,
 		@IContextKeyService private contextKeyService: IContextKeyService,
 		@IListService private listService: IListService
@@ -187,7 +187,8 @@ export class Repl extends Panel implements IPrivateReplService {
 				const focusedProcess = this.debugService.getViewModel().focusedProcess;
 				const completions = focusedProcess ? focusedProcess.completions(frameId, text, position, overwriteBefore) : TPromise.as([]);
 				return wireCancellationToken(token, completions.then(suggestions => ({
-					suggestions: suggestions
+					suggestions,
+					incomplete: true
 				})));
 			}
 		});
@@ -264,7 +265,7 @@ export class Repl extends Panel implements IPrivateReplService {
 
 	private getReplInputOptions(): IEditorOptions {
 		return {
-			wrappingColumn: 0,
+			wordWrap: 'on',
 			overviewRulerLanes: 0,
 			glyphMargin: false,
 			lineNumbers: 'off',
@@ -278,8 +279,7 @@ export class Repl extends Panel implements IPrivateReplService {
 			scrollBeyondLastLine: false,
 			theme: this.themeService.getColorTheme().id,
 			renderLineHighlight: 'none',
-			fixedOverflowWidgets: true,
-			acceptSuggestionOnEnter: false
+			fixedOverflowWidgets: true
 		};
 	}
 
@@ -351,8 +351,7 @@ class AcceptReplInputAction extends EditorAction {
 			precondition: debug.CONTEXT_IN_DEBUG_REPL,
 			kbOpts: {
 				kbExpr: EditorContextKeys.TextFocus,
-				primary: KeyCode.Enter,
-				weight: 50
+				primary: KeyCode.Enter
 			}
 		});
 	}

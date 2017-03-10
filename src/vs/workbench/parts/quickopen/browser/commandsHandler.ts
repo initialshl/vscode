@@ -285,12 +285,8 @@ export class CommandsHandler extends QuickOpenHandler {
 		// Remove duplicates
 		entries = arrays.distinct(entries, (entry) => entry.getLabel() + entry.getGroupLabel());
 
-		// Sort
-		if (searchValue) {
-			entries = entries.sort((elementA, elementB) => elementA.getLabel().length - elementB.getLabel().length);
-		} else {
-			entries = entries.sort((elementA, elementB) => elementA.getLabel().toLowerCase().localeCompare(elementB.getLabel().toLowerCase()));
-		}
+		// Sort by name
+		entries = entries.sort((elementA, elementB) => elementA.getLabel().toLowerCase().localeCompare(elementB.getLabel().toLowerCase()));
 
 		return TPromise.as(new QuickOpenModel(entries));
 	}
@@ -301,9 +297,9 @@ export class CommandsHandler extends QuickOpenHandler {
 
 		for (let i = 0; i < actionDescriptors.length; i++) {
 			const actionDescriptor = actionDescriptors[i];
-			const [keybind] = this.keybindingService.lookupKeybindings(actionDescriptor.id);
-			const keyLabel = keybind ? this.keybindingService.getLabelFor(keybind) : '';
-			const keyAriaLabel = keybind ? this.keybindingService.getAriaLabelFor(keybind) : '';
+			const keybind = this.keybindingService.lookupKeybinding(actionDescriptor.id);
+			const keyLabel = keybind ? keybind.getLabel() : '';
+			const keyAriaLabel = keybind ? keybind.getAriaLabel() : '';
 
 			if (actionDescriptor.label) {
 
@@ -333,9 +329,9 @@ export class CommandsHandler extends QuickOpenHandler {
 		for (let i = 0; i < actions.length; i++) {
 			const action = actions[i];
 
-			const [keybind] = this.keybindingService.lookupKeybindings(action.id);
-			const keyLabel = keybind ? this.keybindingService.getLabelFor(keybind) : '';
-			const keyAriaLabel = keybind ? this.keybindingService.getAriaLabelFor(keybind) : '';
+			const keybind = this.keybindingService.lookupKeybinding(action.id);
+			const keyLabel = keybind ? keybind.getLabel() : '';
+			const keyAriaLabel = keybind ? keybind.getAriaLabel() : '';
 			const label = action.label;
 
 			if (label) {
@@ -360,14 +356,17 @@ export class CommandsHandler extends QuickOpenHandler {
 			const label = action.item.category
 				? nls.localize('cat.title', "{0}: {1}", action.item.category, action.item.title)
 				: action.item.title;
-			const highlights = wordFilter(searchValue, label);
-			if (!highlights) {
-				continue;
+			if (label) {
+				const labelHighlights = wordFilter(searchValue, label);
+				const keybind = this.keybindingService.lookupKeybinding(action.item.id);
+				const keyLabel = keybind ? keybind.getLabel() : '';
+				const keyAriaLabel = keybind ? keybind.getAriaLabel() : '';
+				const alias = action.item.alias ? action.item.alias : null;
+				const aliasHighlights = alias ? wordFilter(searchValue, alias) : null;
+				if (labelHighlights || aliasHighlights) {
+					entries.push(this.instantiationService.createInstance(ActionCommandEntry, keyLabel, keyAriaLabel, label, alias, labelHighlights, aliasHighlights, action));
+				}
 			}
-			const [keybind] = this.keybindingService.lookupKeybindings(action.item.id);
-			const keyLabel = keybind ? this.keybindingService.getLabelFor(keybind) : '';
-			const keyAriaLabel = keybind ? this.keybindingService.getAriaLabelFor(keybind) : '';
-			entries.push(this.instantiationService.createInstance(ActionCommandEntry, keyLabel, keyAriaLabel, label, null, highlights, null, action));
 		}
 
 		return entries;
